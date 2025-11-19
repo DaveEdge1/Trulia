@@ -1,0 +1,39 @@
+# Environment variables
+.env
+
+# Data files
+data/
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.xml
+*.zip
+
+# Output files
+output/
+*.geojson
+*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
