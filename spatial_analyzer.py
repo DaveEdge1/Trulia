@@ -21,58 +21,105 @@ class SpatialAnalyzer:
         self.federal_dir = self.data_dir / 'federal_land'
 
     def load_parcels(self, county_name):
-        """Load parcel data for a county."""
-        file_path = self.parcels_dir / f'{county_name.lower()}_parcels.geojson'
+        """Load parcel data for a county (supports GeoJSON and Shapefile)."""
+        # Try multiple file extensions
+        extensions = ['.geojson', '.shp', '.gpkg']
+        file_path = None
 
-        if not file_path.exists():
-            print(f"✗ Parcel file not found: {file_path}")
+        for ext in extensions:
+            test_path = self.parcels_dir / f'{county_name.lower()}_parcels{ext}'
+            if test_path.exists():
+                file_path = test_path
+                break
+
+        if not file_path:
+            print(f"✗ Parcel file not found for {county_name} County")
+            print(f"  Looked for: {county_name.lower()}_parcels.[geojson|shp|gpkg]")
+            print(f"  In directory: {self.parcels_dir}")
             return None
 
-        print(f"Loading {county_name} County parcels...")
-        gdf = gpd.read_file(file_path)
+        try:
+            print(f"Loading {county_name} County parcels from {file_path.name}...")
+            gdf = gpd.read_file(file_path)
 
-        # Reproject to a projected CRS for accurate area calculations
-        # Using NAD83 / Arizona Central (EPSG:26949) for Arizona
-        gdf = gdf.to_crs(epsg=26949)
+            if len(gdf) == 0:
+                print(f"  ✗ File is empty!")
+                return None
 
-        print(f"  Loaded {len(gdf)} parcels")
-        return gdf
+            # Reproject to a projected CRS for accurate area calculations
+            # Using NAD83 / Arizona Central (EPSG:26949) for Arizona
+            if gdf.crs is None:
+                print(f"  Warning: No CRS defined, assuming EPSG:4326")
+                gdf.set_crs(epsg=4326, inplace=True)
+
+            gdf = gdf.to_crs(epsg=26949)
+
+            print(f"  ✓ Loaded {len(gdf)} parcels")
+            return gdf
+
+        except Exception as e:
+            print(f"  ✗ Error loading {file_path}: {e}")
+            return None
 
     def load_federal_land(self):
-        """Load and combine National Forest and BLM boundaries."""
+        """Load and combine National Forest and BLM boundaries (supports multiple formats)."""
         print("Loading federal land boundaries...")
 
         federal_boundaries = []
 
-        # Load National Forests
-        forest_file = self.federal_dir / 'national_forests.geojson'
-        if forest_file.exists():
-            forests = gpd.read_file(forest_file)
-            forests = forests.to_crs(epsg=26949)
-            forests['land_type'] = 'National Forest'
-            federal_boundaries.append(forests)
-            print(f"  Loaded {len(forests)} National Forest boundaries")
-        else:
-            print(f"  ✗ National Forest file not found")
+        # Load National Forests (try multiple formats)
+        forest_file = None
+        for ext in ['.geojson', '.shp', '.gpkg']:
+            test_path = self.federal_dir / f'national_forests{ext}'
+            if test_path.exists():
+                forest_file = test_path
+                break
 
-        # Load BLM land
-        blm_file = self.federal_dir / 'blm_land.geojson'
-        if blm_file.exists():
-            blm = gpd.read_file(blm_file)
-            blm = blm.to_crs(epsg=26949)
-            blm['land_type'] = 'BLM'
-            federal_boundaries.append(blm)
-            print(f"  Loaded {len(blm)} BLM boundaries")
+        if forest_file:
+            try:
+                forests = gpd.read_file(forest_file)
+                if forests.crs is None:
+                    forests.set_crs(epsg=4326, inplace=True)
+                forests = forests.to_crs(epsg=26949)
+                forests['land_type'] = 'National Forest'
+                federal_boundaries.append(forests)
+                print(f"  ✓ Loaded {len(forests)} National Forest boundaries from {forest_file.name}")
+            except Exception as e:
+                print(f"  ✗ Error loading National Forest file: {e}")
         else:
-            print(f"  ✗ BLM file not found")
+            print(f"  ✗ National Forest file not found in {self.federal_dir}")
+
+        # Load BLM land (try multiple formats)
+        blm_file = None
+        for ext in ['.geojson', '.shp', '.gpkg']:
+            test_path = self.federal_dir / f'blm_land{ext}'
+            if test_path.exists():
+                blm_file = test_path
+                break
+
+        if blm_file:
+            try:
+                blm = gpd.read_file(blm_file)
+                if blm.crs is None:
+                    blm.set_crs(epsg=4326, inplace=True)
+                blm = blm.to_crs(epsg=26949)
+                blm['land_type'] = 'BLM'
+                federal_boundaries.append(blm)
+                print(f"  ✓ Loaded {len(blm)} BLM boundaries from {blm_file.name}")
+            except Exception as e:
+                print(f"  ✗ Error loading BLM file: {e}")
+        else:
+            print(f"  ✗ BLM file not found in {self.federal_dir}")
 
         if not federal_boundaries:
             print("✗ No federal land boundaries loaded!")
+            print(f"\nPlease download federal land data and place in: {self.federal_dir}")
+            print("See QUICK_START.md for download instructions")
             return None
 
         # Combine all federal land
         combined = gpd.GeoDataFrame(pd.concat(federal_boundaries, ignore_index=True))
-        print(f"  Total federal land polygons: {len(combined)}")
+        print(f"  ✓ Total federal land polygons: {len(combined)}")
 
         return combined
 
